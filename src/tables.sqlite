@@ -1,0 +1,8 @@
+create table "jobs" (
+  "name" text not null,
+  "command_json" text not null
+);
+
+create table "limit" (
+  "value" integer not null
+);
