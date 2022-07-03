@@ -1,6 +1,7 @@
 create table "jobs" (
   "name" text not null,
-  "command_json" text not null
+  "command_json" text not null,
+  "cwd" text not null
 );
 
 create table "limit" (

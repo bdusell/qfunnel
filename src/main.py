@@ -4,6 +4,7 @@ import json
 import pathlib
 import shlex
 import sqlite3
+import subprocess
 import time
 
 from qfunnel.format import format_box_table, format_date
@@ -62,13 +63,14 @@ def try_dequeue_one(conn):
         return False
 
 def dequeue_one(conn):
-    row = conn.execute('select rowid, "name", "command_json" from "jobs" order by rowid asc limit 1').fetchone()
+    row = conn.execute('select rowid, "name", "command_json", "cwd" from "jobs" order by rowid asc limit 1').fetchone()
     if row is None:
         return False
     else:
-        rowid, name, command_json = row
+        rowid, name, command_json, cwd = row
         command_args = json.loads(command_json)
-        submit_job_to_backend(name, command_args)
+        # TODO there's a race condition here
+        submit_job_to_backend(name, command_args, cwd)
         with conn:
             conn.execute('delete from "jobs" where rowid = ?', (rowid,))
         return True
@@ -85,23 +87,24 @@ QUEUE = 'gpu@@nlp-gpu'
 def get_num_taken_slots():
     return sum(1 for row in get_backend_jobs(user=get_current_user(), queue=QUEUE))
 
-def submit_job_to_backend(name, args):
+def submit_job_to_backend(name, args, cwd):
     qsub_command_args = ['qsub', '-N', name, '-q', QUEUE, '-l', 'gpu_card=1', '-w'] + args
-    print(' '.join(shlex.quote(s) for s in qsub_command_args))
-    subprocess.run(qsub_command_args)
+    print('; '.join(' '.join(shlex.quote(s) for s in command) for command in [['cd', cwd], qsub_command_args]))
+    subprocess.run(qsub_command_args, cwd=cwd)
 
 def run_setlimit(value):
     with get_db_connection() as conn:
         with conn:
             conn.execute('update "limit" set "value" = ?', (value,))
-        run_check_impl(conn)
+        #run_check_impl(conn)
 
 def run_submit(name, command):
     command_json = json.dumps(command, separators=(',', ':'))
+    cwd = str(pathlib.Path.cwd())
     with get_db_connection() as conn:
         with conn:
-            conn.execute('insert into "jobs"("name", "command_json") values (?, ?)', (name, command_json))
-        run_check_impl(conn)
+            conn.execute('insert into "jobs"("name", "command_json", "cwd") values (?, ?, ?)', (name, command_json, cwd))
+        #run_check_impl(conn)
 
 def run_list():
     rows = []
@@ -185,7 +188,10 @@ def main():
     if args.command == 'setlimit':
         run_setlimit(args.value)
     elif args.command == 'submit':
-        run_submit(args.name, args.args)
+        command_args = args.args
+        if command_args and command_args[0] == '--':
+            command_args = command_args[1:]
+        run_submit(args.name, command_args)
     elif args.command == 'list':
         run_list()
     elif args.command == 'check':
