@@ -27,10 +27,13 @@ def get_db_connection():
 
 def ensure_db_initialized(conn):
     try:
-        limit = get_limit(conn)
+        get_limit(conn)
     except sqlite3.OperationalError as e:
         if e.args[0] == 'no such table: limit':
             initialize_db(conn)
+        elif e.args[0] == 'database is locked':
+            # This is ok, because it indicates the database has been created.
+            pass
         else:
             raise
 
@@ -50,17 +53,49 @@ insert into "limit"("value") values ({DEFAULT_LIMIT});
 commit;
 ''')
 
+@contextlib.contextmanager
+def lock_db(conn):
+    def acquire_lock():
+        try:
+            conn.execute('begin exclusive')
+        except sqlite3.OperationalError as e:
+            if e.args[0] == 'database is locked':
+                print('failed to get lock')
+                return False, None
+            else:
+                raise
+        else:
+            return True, None
+    wait(acquire_lock)
+    try:
+        yield
+    except:
+        conn.execute('rollback')
+        raise
+    else:
+        conn.execute('commit')
+
+def wait(func, seconds=1, max_retries=10):
+    for i in range(max_retries):
+        if i > 0:
+            time.sleep(seconds)
+        success, result = func()
+        if success:
+            return result
+    raise ValueError('too many retries')
+
 def run_check_impl(conn):
     while try_dequeue_one(conn):
         pass
 
 def try_dequeue_one(conn):
-    limit = get_limit(conn)
-    taken = get_num_taken_slots()
-    if taken < limit:
-        return dequeue_one(conn)
-    else:
-        return False
+    with lock_db(conn):
+        limit = get_limit(conn)
+        taken = get_num_taken_slots()
+        if taken < limit:
+            return dequeue_one(conn)
+        else:
+            return False
 
 def dequeue_one(conn):
     row = conn.execute('select rowid, "name", "command_json", "cwd" from "jobs" order by rowid asc limit 1').fetchone()
@@ -69,10 +104,8 @@ def dequeue_one(conn):
     else:
         rowid, name, command_json, cwd = row
         command_args = json.loads(command_json)
-        # TODO there's a race condition here
         submit_job_to_backend(name, command_args, cwd)
-        with conn:
-            conn.execute('delete from "jobs" where rowid = ?', (rowid,))
+        conn.execute('delete from "jobs" where rowid = ?', (rowid,))
         return True
 
 def get_backend_jobs(user, queue=None):
@@ -88,7 +121,7 @@ def get_num_taken_slots():
     return sum(1 for row in get_backend_jobs(user=get_current_user(), queue=QUEUE))
 
 def submit_job_to_backend(name, args, cwd):
-    qsub_command_args = ['qsub', '-N', name, '-q', QUEUE, '-l', 'gpu_card=1', '-w'] + args
+    qsub_command_args = ['qsub', '-N', name, '-q', QUEUE, '-l', 'gpu_card=1', '-w', 'w'] + args
     print('; '.join(' '.join(shlex.quote(s) for s in command) for command in [['cd', cwd], qsub_command_args]))
     subprocess.run(qsub_command_args, cwd=cwd)
 
@@ -96,15 +129,17 @@ def run_setlimit(value):
     with get_db_connection() as conn:
         with conn:
             conn.execute('update "limit" set "value" = ?', (value,))
-        #run_check_impl(conn)
+        run_check_impl(conn)
 
 def run_submit(name, command):
     command_json = json.dumps(command, separators=(',', ':'))
     cwd = str(pathlib.Path.cwd())
     with get_db_connection() as conn:
         with conn:
-            conn.execute('insert into "jobs"("name", "command_json", "cwd") values (?, ?, ?)', (name, command_json, cwd))
-        #run_check_impl(conn)
+            conn.execute(
+                'insert into "jobs"("name", "command_json", "cwd") values (?, ?, ?)',
+                (name, command_json, cwd))
+        run_check_impl(conn)
 
 def run_list():
     rows = []
