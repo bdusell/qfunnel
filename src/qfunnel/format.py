@@ -1,3 +1,5 @@
+import itertools
+
 def format_box_table(head, rows):
     return format_table(
         head,
@@ -9,7 +11,7 @@ def format_box_table(head, rows):
 
 def format_table(head, rows, vert, horiz, cross):
     widths = [
-        max(len(head[col]), max(len(row[col]) for row in rows))
+        max(len(row[col]) for row in itertools.chain([head], rows))
         for col in range(len(head))
     ]
     yield format_row(head, widths, vert)
