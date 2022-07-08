@@ -8,7 +8,7 @@ import subprocess
 import time
 
 from qfunnel.format import format_box_table, format_date
-from qfunnel.parse_sge import parse_table, get_job_id, get_since
+from qfunnel.parse_sge import parse_table, get_job_id, get_since, parse_explain_sections
 from qfunnel.run_sge import capture_sge_command_output
 from qfunnel.util import get_current_user
 
@@ -60,7 +60,6 @@ def lock_db(conn):
             conn.execute('begin exclusive')
         except sqlite3.OperationalError as e:
             if e.args[0] == 'database is locked':
-                print('failed to get lock')
                 return False, None
             else:
                 raise
@@ -110,10 +109,40 @@ def dequeue_one(conn):
 
 def get_backend_jobs(user, queue=None):
     args = ['qstat', '-u', user]
+    # TODO Use qstat -q for running jobs, and always check qstat -u + qstat -j for qw jobs (use string match for queue name)
+    # TODO Use qstat -u ... -r -xml to get qstat -u + qstat -j all at once
+    rows = list(parse_table(capture_sge_command_output(args)))
+    # For some reason, qstat does not show the queue which a queued and
+    # waiting (qw) job is scheduled for. So, we need to figure out the queues
+    # by parsing the output of `qstat -explain c -j id1,id2,...`.
+    # TODO Exclude array jobs?
+    jobs_with_no_queue = [row for row in rows if not row['queue']]
+    if jobs_with_no_queue:
+        job_id_to_queue = dict(parse_job_queues(capture_sge_command_output([
+            'qstat',
+            '-j', ','.join(row['job-ID'] for row in jobs_with_no_queue)
+        ])))
+        for row in jobs_with_no_queue:
+            row['queue'] = job_id_to_queue.get(row['job-ID'], '')
     if queue is not None:
-        args.extend(['-q', queue])
-    rows = parse_table(capture_sge_command_output(args))
-    return (row for row in rows if row['user'] == user)
+        pass
+    return rows
+
+def parse_job_queues(s):
+    for section in parse_explain_sections(s):
+        yield get_job_id_and_queue(section)
+
+def get_job_id_and_queue(lines):
+    job_id = None
+    queue = None
+    for line in lines:
+        if line.startswith('job_number:'):
+            _, job_id = line.split(None, 1)
+        elif line.startswith('hard_queue_list:'):
+            _, queue = line.split(None, 1)
+        if job_id is not None and queue is not None:
+            break
+    return job_id, queue
 
 QUEUE = 'gpu@@nlp-gpu'
 
@@ -127,7 +156,7 @@ def submit_job_to_backend(name, args, cwd):
 
 def run_setlimit(value):
     with get_db_connection() as conn:
-        with conn:
+        with lock_db(conn):
             conn.execute('update "limit" set "value" = ?', (value,))
         run_check_impl(conn)
 
@@ -135,7 +164,7 @@ def run_submit(name, command):
     command_json = json.dumps(command, separators=(',', ':'))
     cwd = str(pathlib.Path.cwd())
     with get_db_connection() as conn:
-        with conn:
+        with lock_db(conn):
             conn.execute(
                 'insert into "jobs"("name", "command_json", "cwd") values (?, ?, ?)',
                 (name, command_json, cwd))
@@ -154,6 +183,7 @@ def run_list():
             format_date(get_since(row))
         ))
     with get_db_connection() as conn:
+        # TODO wait until db unlocked
         for name, command_json in conn.execute('select "name", "command_json" from "jobs" order by rowid asc'):
             rows.append((
                 '',

@@ -44,3 +44,18 @@ def get_job_id(row):
 
 def get_since(row):
     return parse_date(row['submit/start at'])
+
+EXPLAIN_SECTION_SEPARATOR = '=============================================================='
+
+def parse_explain_sections(s):
+    lines = s.split('\n')
+    section = []
+    for line in lines:
+        if line == EXPLAIN_SECTION_SEPARATOR:
+            if section:
+                yield section
+                section = []
+        else:
+            section.append(line)
+    if section:
+        yield section
