@@ -86,8 +86,11 @@ def test_submit_pending():
         program = Program(backend)
         program.set_limit('gpu@@a', 5)
         for i in range(10):
-            program.submit(['gpu@@a'], f'job-{i}', ['script.bash'])
-        assert backend.running_jobs() == { 'gpu@@a' : {f'job-{i}' for i in range(3)} }
+            program.submit(['gpu@@a', 'gpu@@b'], f'job-{i}', ['script.bash'])
+        assert backend.running_jobs() == {
+            'gpu@@a' : {f'job-{i}' for i in range(3)},
+            'gpu@@b' : {f'job-{i}' for i in range(5, 10)}
+        }
         assert backend.pending_jobs() == { 'gpu@@a' : {f'job-{i}' for i in range(3, 5)} }
 
 def test_list():

@@ -42,10 +42,6 @@ class MockBackend(Backend):
     def get_queue_jobs(self, queue):
         return [job for job in self.get_all_jobs() if job.queue == queue]
 
-    def get_own_queue_jobs(self, queue):
-        own_user = self.get_own_user()
-        return [job for job in self.get_all_jobs() if job.user == own_user and job.queue == queue]
-
     def add_job(self, queue, name, user=None):
         if user is None:
             user = self.get_own_user()

@@ -91,9 +91,15 @@ select "queue", "value"
 from "limits"
 order by "queue" asc
 ''').fetchall()
+            pending_jobs = collections.defaultdict(list)
+            for job in self.backend.get_own_pending_jobs():
+                pending_jobs[job.queue].append(job)
             queues = []
             for queue, limit in rows:
-                taken = sum(job.slots for job in self.backend.get_own_queue_jobs(queue))
+                taken = sum(
+                    job.slots
+                    for job in self.add_running_backend_jobs_in_queue(pending_jobs[queue], queue)
+                )
                 queues.append((queue, Capacity(taken, limit)))
         return ListOwnInfo(jobs, queues)
 
@@ -202,6 +208,9 @@ delete from "jobs" where "id" = ?
             for job in self.backend.get_own_pending_jobs()
             if job.queue == queue
         )
+        return self.add_running_backend_jobs_in_queue(pending_jobs, queue)
+
+    def add_running_backend_jobs_in_queue(self, pending_jobs, queue):
         running_jobs = self.backend.get_own_running_jobs_in_queue(queue)
         return collections.OrderedDict(
             (job.id, job)
@@ -251,7 +260,30 @@ select "id", "name" from "jobs" order by "id" asc
         return [*backend_jobs, *local_jobs]
 
 class Backend:
-    pass
+
+    def get_cwd(self):
+        raise NotImplementedError
+
+    def get_own_user(self):
+        raise NotImplementedError
+
+    def connect_to_db(self):
+        raise NotImplementedError
+
+    def submit_job(self, queue, name, args, cwd):
+        raise NotImplementedError
+
+    def get_own_pending_jobs(self):
+        raise NotImplementedError
+
+    def get_own_running_jobs_in_queue(self):
+        raise NotImplementedError
+
+    def get_queue_jobs(self):
+        raise NotImplementedError
+
+    def get_own_jobs(self):
+        raise NotImplementedError
 
 @dataclasses.dataclass
 class Job:
