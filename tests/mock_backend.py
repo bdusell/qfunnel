@@ -13,6 +13,7 @@ class MockBackend(Backend):
         self.db_file_name = db_file_name
         self.running_jobs_by_name = {}
         self.job_id_counter = 0
+        self.capacities = {}
 
     def connect_to_db(self):
         return sqlite3.connect(self.db_file_name)
@@ -24,10 +25,9 @@ class MockBackend(Backend):
         return 'myuser'
 
     def submit_job(self, queue, name, args, cwd):
-        self.add_running_job(queue, name)
+        self.add_job(queue, name)
 
     def get_own_pending_jobs(self):
-        # TODO Implement pending jobs.
         own_user = self.get_own_user()
         return [job for job in self.get_all_jobs() if job.user == own_user and job.state == 'qw']
 
@@ -46,33 +46,55 @@ class MockBackend(Backend):
         own_user = self.get_own_user()
         return [job for job in self.get_all_jobs() if job.user == own_user and job.queue == queue]
 
-    def add_running_job(self, queue, name, user=None):
+    def add_job(self, queue, name, user=None):
         if user is None:
             user = self.get_own_user()
         if name in self.running_jobs_by_name:
             raise ValueError
+        capacity = self.capacities.get(queue)
+        if capacity is not None:
+            num_running = sum(job.slots for job in self.get_all_jobs() if job.queue == queue and job.state == 'r')
+            if num_running < capacity:
+                state = 'r'
+            else:
+                state = 'qw'
+        else:
+            state = 'r'
         self.running_jobs_by_name[name] = Job(
             id=self.job_id_counter,
             user=user,
             name=name,
             slots=1,
-            state='r',
+            state=state,
             queue=queue,
             since=datetime.datetime(2022, 7, 9)
         )
         self.job_id_counter += 1
 
-    def running_jobs(self):
+    def jobs_with_state(self, state):
         result = collections.defaultdict(set)
         for job in self.running_jobs_by_name.values():
-            result[job.queue].add(job.name)
+            if job.state == state:
+                result[job.queue].add(job.name)
         return dict(result)
+
+    def running_jobs(self):
+        return self.jobs_with_state('r')
+
+    def pending_jobs(self):
+        return self.jobs_with_state('qw')
 
     def get_all_jobs(self):
         return sorted(self.running_jobs_by_name.values(), key=lambda job: job.id)
 
     def finish_job(self, name):
-        del self.running_jobs_by_name[name]
+        old_job = self.running_jobs_by_name.pop(name)
+        pending_jobs = self.get_own_pending_jobs()
+        if pending_jobs:
+            pending_jobs[0].state = 'r'
+
+    def set_capacity(self, queue, value):
+        self.capacities[queue] = value
 
 @contextlib.contextmanager
 def get_mock_backend():

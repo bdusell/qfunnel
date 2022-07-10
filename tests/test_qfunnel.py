@@ -80,6 +80,16 @@ def test_buffered_fallback():
         program.check()
         assert backend.running_jobs() == { 'gpu@@a' : {'job-a'}, 'gpu@@b' : {'job-b'} }
 
+def test_submit_pending():
+    with get_mock_backend() as backend:
+        backend.set_capacity('gpu@@a', 3)
+        program = Program(backend)
+        program.set_limit('gpu@@a', 5)
+        for i in range(10):
+            program.submit(['gpu@@a'], f'job-{i}', ['script.bash'])
+        assert backend.running_jobs() == { 'gpu@@a' : {f'job-{i}' for i in range(3)} }
+        assert backend.pending_jobs() == { 'gpu@@a' : {f'job-{i}' for i in range(3, 5)} }
+
 def test_list():
     with get_mock_backend() as backend:
         program = Program(backend)
@@ -109,7 +119,7 @@ def test_list_queue():
     with get_mock_backend() as backend:
         program = Program(backend)
         for i in range(5):
-            backend.add_running_job('gpu@@a', f'other-{i}', 'otheruser')
+            backend.add_job('gpu@@a', f'other-{i}', 'otheruser')
         program.set_limit('gpu@@a', 3)
         program.set_limit('gpu@@b', 3)
         for i in range(10):
