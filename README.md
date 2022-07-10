@@ -15,6 +15,13 @@ pip3 install --user git+https://github.com/bdusell/qfunnel
 The `qfunnel` package provides the `qf` executable under `~/.local/bin`. Make
 sure to add `~/.local/bin` to your `PATH`.
 
+## Upgrading
+
+```sh
+pip3 uninstall qfunnel
+pip3 install --user git+https://github.com/bdusell/qfunnel
+```
+
 ## Usage
 
 ### Manage queue limits
