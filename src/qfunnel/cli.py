@@ -4,6 +4,12 @@ from qfunnel.format import format_box_table, format_date
 from qfunnel.program import Program
 from qfunnel.real_backend import RealBackend
 
+def print_limit_table(limits):
+    head = ['Queue', 'Limit']
+    rows = [(queue, str(limit)) for queue, limit in limits]
+    for line in format_box_table(head, rows):
+        print(line)
+
 def print_job_table(jobs, show_user):
     head = ['ID']
     if show_user:
@@ -16,16 +22,21 @@ def print_job_table(jobs, show_user):
             row.append(job.user)
         row.extend([job.name, job.state, job.queue, format_date(job.since)])
         rows.append(row)
-    lines = format_box_table(head, rows)
-    for line in lines:
+    for line in format_box_table(head, rows):
         print(line)
 
-def describe_capacity(capacity):
-    if capacity.limit is not None:
-        available = max(0, capacity.limit - capacity.taken)
-        return f'{capacity.taken}/{capacity.limit} ({available} available)'
-    else:
-        return f'{capacity.taken}/unlimited'
+def print_capacity_table(limits):
+    head = ['Queue', 'Taken', 'Limit', 'Available']
+    rows = []
+    for queue, capacity in limits:
+        rows.append((
+            queue,
+            str(capacity.taken),
+            str(capacity.limit) if capacity.limit is not None else '',
+            str(max(0, capacity.limit - capacity.taken)) if capacity.limit is not None else ''
+        ))
+    for line in format_box_table(head, rows):
+        print(line)
 
 def main():
 
@@ -72,8 +83,7 @@ def main():
                     else:
                         print(limit)
                 else:
-                    for queue, limit in program.get_all_limits():
-                        print(f'{queue}\t{limit}')
+                    print_limit_table(program.get_all_limits())
     elif args.command == 'submit':
         command_args = args.args
         if command_args and command_args[0] == '--':
@@ -83,12 +93,13 @@ def main():
         if args.queue is not None:
             info = program.list_queue_jobs(args.queue)
             print_job_table(info.jobs, show_user=True)
-            print(describe_capacity(info.capacity))
+            print()
+            print_capacity_table([(args.queue, info.capacity)])
         else:
             info = program.list_own_jobs()
             print_job_table(info.jobs, show_user=False)
-            for queue, capacity in info.queues:
-                print(f'{queue}\t{describe_capacity(capacity)}')
+            print()
+            print_capacity_table(info.queues)
     elif args.command == 'check':
         program.check()
     elif args.command == 'watch':
