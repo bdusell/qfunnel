@@ -43,7 +43,7 @@ You can print the current limit by running:
 qf limit 'gpu@@nlp-gpu'
 ```
 
-You can print all limits by running;
+You can print all limits by running:
 
 ```sh
 qf limit
