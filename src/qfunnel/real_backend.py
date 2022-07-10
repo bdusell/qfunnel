@@ -82,32 +82,8 @@ class RealBackend(Backend):
         jobs = parse_xml_jobs(root.find('queue_info'))
         return [dict_to_job(job) for job in jobs]
 
-def get_env_vars(names):
-    result = {}
-    for name in names:
-        value = os.environ.get(name)
-        if value is not None:
-            result[name] = value
-    return result
-
 def run_sge_command(args, **kwargs):
-    return subprocess.run(
-        args,
-        env={
-            **get_env_vars([
-                'PATH',
-                'SGE_ROOT',
-                'SGE_CELL',
-                'SGE_QMASTER_PORT',
-                'SGE_LOAD_AVG',
-                'SGE_EXECD_PORT',
-                'SGE_CLUSTER_NAME'
-            ]),
-            'SGE_LONG_QNAMES' : '-1',
-            'SGE_LONG_JOB_NAMES' : '-1'
-        },
-        **kwargs
-    )
+    return subprocess.run(args, **kwargs)
 
 def capture_sge_command_output(args):
     return run_sge_command(args, capture_output=True, encoding='ascii').stdout
