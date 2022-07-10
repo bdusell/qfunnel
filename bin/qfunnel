@@ -1,3 +1,0 @@
-#!/bin/bash
-dir=$(dirname "$BASH_SOURCE")
-PYTHONPATH=$dir/../src:$PYTHONPATH exec python3 "$dir"/../src/main.py "$@"
