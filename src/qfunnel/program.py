@@ -159,9 +159,10 @@ order by "queue" asc
 
     def try_dequeue_one(self, conn):
         with self.lock_db(conn):
-            # Using min() ensures that all the other columns are for the
-            # highest-priority job for each queue. (This is a special case in
-            # SQLite.)
+            # The rowid of the "job_queues" table determines the priority of
+            # each locally buffered job. Using min() on rowid ensures that all
+            # the other columns are for the highest-priority job for each
+            # queue. (This is a special case in SQLite.)
             rows = conn.execute('''\
 select
   "queue1" as "queue",
@@ -175,13 +176,13 @@ select
   "jobs"."command_json" as "command_json",
   "jobs"."cwd" as "cwd"
 from (
-  select min(rowid) as "rowid", "job_id", "queue" as "queue1"
+  select min(rowid) as "queue_rowid", "job_id", "queue" as "queue1"
   from "job_queues"
   group by "queue"
 )
 join "jobs"
   on "job_id" = "jobs"."id"
-order by "rowid" asc
+order by "queue_rowid" asc
 ''').fetchall()
             for queue, limit, job_id, name, command_json, cwd in rows:
                 if limit is None or self.queue_has_open_slots(queue, limit):
@@ -237,6 +238,7 @@ delete from "jobs" where "id" = ?
 select "queue"
 from "job_queues"
 where "job_id" = ?
+order by rowid asc
 ''', (job_id,)).fetchall()
             yield Job(
                 id=f'x{job_id}',
