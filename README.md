@@ -9,7 +9,7 @@ requiring you to submit new jobs manually.
 ## Installation
 
 ```sh
-pip install --user git+https://github.com/bdusell/qfunnel
+pip3 install --user git+https://github.com/bdusell/qfunnel
 ```
 
 The `qfunnel` package provides the `qf` executable under `~/.local/bin`. Make
