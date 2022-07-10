@@ -233,6 +233,7 @@ delete from "jobs" where "id" = ?
         # We could fetch all the queues for each job in one query using
         # group_concat(), but according to the SQLite docs, the order of
         # concatenation is arbitrary.
+        user = self.backend.get_own_user()
         for job_id, name in rows:
             queue_rows = conn.execute('''\
 select "queue"
@@ -242,7 +243,7 @@ order by rowid asc
 ''', (job_id,)).fetchall()
             yield Job(
                 id=f'x{job_id}',
-                user=None,
+                user=user,
                 name=name,
                 slots=1,
                 state='-',
