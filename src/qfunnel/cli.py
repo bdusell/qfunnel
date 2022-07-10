@@ -20,7 +20,12 @@ def print_job_table(jobs, show_user):
         row = [job.id]
         if show_user:
             row.append(job.user)
-        row.extend([job.name, job.state, job.queue, format_date(job.since)])
+        row.extend([
+            job.name,
+            job.state,
+            job.queue,
+            format_date(job.since) if job.since is not None else ''
+        ])
         rows.append(row)
     for line in format_box_table(head, rows):
         print(line)
