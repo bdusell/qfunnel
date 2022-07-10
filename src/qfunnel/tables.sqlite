@@ -1,0 +1,20 @@
+create table "jobs" (
+  "id" integer primary key,
+  "name" text not null,
+  "command_json" text not null,
+  "cwd" text not null
+);
+
+create table "limits" (
+  "queue" text not null,
+  "value" integer not null,
+  primary key ("queue")
+);
+
+create table "job_queues" (
+  "job_id" integer not null,
+  "queue" text not null,
+  foreign key ("job_id") references "jobs"("id"),
+  primary key ("job_id", "queue")
+  /* The rowid, which is determined by insertion order, dictates the priority. */
+);
