@@ -70,29 +70,35 @@ values (?, ?)
             self.check_impl(conn)
 
     def list_queue_jobs(self, queue):
-        raise NotImplementedError
+        # TODO capacity
+        return ListQueueInfo(self.list_queue_jobs_jobs(queue), None)
+
+    def list_queue_jobs_jobs(self, queue):
+        backend_jobs = self.backend.get_queue_jobs(queue)
+        with self.get_db_connection() as conn:
+            rows = conn.execute('''\
+select "id", "name"
+from "jobs"
+where exists (
+  select 1 from "job_queues" where "job_id" = "jobs"."id" and "queue" = ?
+)
+order by "id" asc
+''', (queue,)).fetchall()
+            local_jobs = list(self.get_local_jobs(conn, rows))
+        return [*backend_jobs, *local_jobs]
 
     def list_own_jobs(self):
+        # TODO capacity
+        return ListOwnInfo(self.list_own_jobs_jobs(), None)
+
+    def list_own_jobs_jobs(self):
         backend_jobs = self.backend.get_own_jobs()
         with self.get_db_connection() as conn:
-            # We could fetch all the queues for each job in one query using
-            # group_concat(), but according to the SQLite docs, the order of
-            # concatenation is arbitrary.
             rows = conn.execute('''\
 select "id", "name" from "jobs" order by "id" asc
 ''').fetchall()
-            local_jobs = [
-                Job(
-                    id=f'x{job_id}',
-                    name=name,
-                    slots=1,
-                    state='-',
-                    queue=' '.join(self.get_job_queues(conn, job_id)),
-                    since=None
-                )
-                for job_id, name in rows
-            ]
-        return itertools.chain(backend_jobs, local_jobs)
+            local_jobs = list(self.get_local_jobs(conn, rows))
+        return [*backend_jobs, *local_jobs]
 
     def check(self):
         with self.get_db_connection() as conn:
@@ -184,19 +190,19 @@ delete from "jobs" where "id" = ?
         slots = 0
         if slots >= limit:
             return False
-        for job in self.enumerate_jobs_in_queue(queue):
+        for job in self.enumerate_own_backend_jobs_in_queue(queue):
             slots += job.slots
             if slots >= limit:
                 return False
         return True
 
-    def enumerate_jobs_in_queue(self, queue):
+    def enumerate_own_backend_jobs_in_queue(self, queue):
         # Query the pending jobs before querying the running jobs to avoid
         # a race condition where a pending job becomes a running job in
         # between queries.
         pending_jobs = (
             job
-            for job in self.backend.get_all_pending_jobs()
+            for job in self.backend.get_own_pending_jobs()
             if job.queue == queue
         )
         running_jobs = self.backend.get_running_jobs_in_queue(queue)
@@ -205,13 +211,26 @@ delete from "jobs" where "id" = ?
             for job in itertools.chain(pending_jobs, running_jobs)
         ).values()
 
-    def get_job_queues(self, conn, job_id):
-        rows = conn.execute('''\
+    def get_local_jobs(self, conn, rows):
+        # We could fetch all the queues for each job in one query using
+        # group_concat(), but according to the SQLite docs, the order of
+        # concatenation is arbitrary.
+        for job_id, name in rows:
+            queue_rows = conn.execute('''\
 select "queue"
 from "job_queues"
 where "job_id" = ?
 ''', (job_id,)).fetchall()
-        return (queue for queue, in rows)
+            yield Job(
+                id=f'x{job_id}',
+                user=None,
+                name=name,
+                slots=1,
+                state='-',
+                queue=' '.join(queue for queue, in queue_rows),
+                # TODO Add timestamp to database?
+                since=None
+            )
 
 class Backend:
     pass
@@ -219,10 +238,26 @@ class Backend:
 @dataclasses.dataclass
 class Job:
     id: str
+    user: str
     name: str
     slots: int
     state: str
     queue: str
     since: datetime.datetime
+
+@dataclasses.dataclass
+class Capacity:
+    taken: int
+    limit: int
+
+@dataclasses.dataclass
+class ListQueueInfo:
+    jobs: list
+    capacity: Capacity
+
+@dataclasses.dataclass
+class ListOwnInfo:
+    jobs: list
+    queues: list
 
 TABLES_FILE = pathlib.Path(__file__).parent / 'tables.sqlite'

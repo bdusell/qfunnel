@@ -87,11 +87,36 @@ def test_list():
         program.set_limit('gpu@@b', 0)
         for i in range(10):
             program.submit(['gpu@@a', 'gpu@@b'], f'job-{i}', ['script.bash'])
-        jobs = list(program.list_own_jobs())
+        info = program.list_own_jobs()
+        jobs = info.jobs
         assert len(jobs) == 10
         for job in jobs[:6]:
             assert job.state == 'r'
             assert job.queue == 'gpu@@a'
         for job in jobs[6:]:
+            assert job.state == '-'
+            assert job.queue == 'gpu@@a gpu@@b'
+
+def test_list_queue():
+    with get_mock_backend() as backend:
+        program = Program(backend)
+        for i in range(5):
+            backend.add_running_job('gpu@@a', f'other-{i}', 'otheruser')
+        program.set_limit('gpu@@a', 3)
+        program.set_limit('gpu@@b', 3)
+        for i in range(10):
+            program.submit(['gpu@@a', 'gpu@@b'], f'job-{i}', ['script.bash'])
+        info = program.list_queue_jobs('gpu@@a')
+        jobs = info.jobs
+        assert len(jobs) == 5 + 3 + 4
+        for job in jobs[:5]:
+            assert job.user == 'otheruser'
+            assert job.state == 'r'
+            assert job.queue == 'gpu@@a'
+        for job in jobs[5:8]:
+            assert job.user == 'myuser'
+            assert job.state == 'r'
+            assert job.queue == 'gpu@@a'
+        for job in jobs[8:]:
             assert job.state == '-'
             assert job.queue == 'gpu@@a gpu@@b'

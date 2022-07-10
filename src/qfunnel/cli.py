@@ -69,8 +69,8 @@ def main():
         else:
             info = program.list_own_jobs()
             print_job_table(info.jobs, show_user=False)
-            for queue_info in info.queues:
-                print(f'{queue_info.queue}\t{describe_capacity(queue_info.capacity)}')
+            for queue, capacity in info.queues:
+                print(f'{queue}\t{describe_capacity(capacity)}')
     elif args.command == 'check':
         program.check()
     elif args.command == 'watch':
