@@ -25,6 +25,15 @@ class RealBackend(Backend):
         # while running qstat.
         return sqlite3.connect(DB_FILE, timeout=60.0)
 
+    def submit_job(self, queue, name, args, cwd):
+        run_sge_command([
+            'qsub',
+            '-q', queue,
+            '-N', name,
+            '-w', 'w',
+            *args
+        ], cwd=cwd)
+
     def get_own_jobs(self):
         output = capture_sge_command_output([
             'qstat',
