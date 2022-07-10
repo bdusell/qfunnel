@@ -1,13 +1,28 @@
 import argparse
 
+from qfunnel.format import format_box_table, format_date
 from qfunnel.program import Program
 from qfunnel.real_backend import RealBackend
 
 def print_job_table(jobs, show_user):
-    raise NotImplementedError
+    head = ['ID']
+    if show_user:
+        head.append('User')
+    head.extend(['Name', 'State', 'Queue', 'Since'])
+    rows = []
+    for job in jobs:
+        row = [job.id]
+        if show_user:
+            row.append(job.user)
+        row.extend([job.name, job.state, job.queue, format_date(job.since)])
+        rows.append(row)
+    lines = format_box_table(head, rows)
+    for line in lines:
+        print(line)
 
 def describe_capacity(capacity):
-    raise NotImplementedError
+    available = max(0, capacity.limit - capacity.taken)
+    return f'{capacity.taken}/{capacity.limit} ({available} available)'
 
 def main():
 

@@ -15,17 +15,21 @@ class MockBackend(Backend):
         self.job_id_counter = 0
         self.capacities = {}
 
-    def connect_to_db(self):
-        return sqlite3.connect(self.db_file_name)
-
     def get_cwd(self):
         return '/fake/directory'
 
     def get_own_user(self):
         return 'myuser'
 
+    def connect_to_db(self):
+        return sqlite3.connect(self.db_file_name)
+
     def submit_job(self, queue, name, args, cwd):
         self.add_job(queue, name)
+
+    def get_own_jobs(self):
+        own_user = self.get_own_user()
+        return [job for job in self.get_all_jobs() if job.user == own_user]
 
     def get_own_pending_jobs(self):
         own_user = self.get_own_user()
@@ -34,10 +38,6 @@ class MockBackend(Backend):
     def get_own_running_jobs_in_queue(self, queue):
         own_user = self.get_own_user()
         return [job for job in self.get_all_jobs() if job.user == own_user and job.queue == queue and job.state == 'r']
-
-    def get_own_jobs(self):
-        own_user = self.get_own_user()
-        return [job for job in self.get_all_jobs() if job.user == own_user]
 
     def get_running_jobs_in_queue(self, queue):
         return [job for job in self.get_all_jobs() if job.queue == queue and job.state == 'r']

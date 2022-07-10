@@ -85,15 +85,21 @@ select "value" from "limits" where "queue" = ?
 
     def list_own_jobs(self):
         with self.get_db_connection() as conn:
-            jobs = self.get_own_jobs(conn)
+            own_backend_jobs = self.backend.get_own_jobs()
+            rows = conn.execute('''\
+select "id", "name" from "jobs" order by "id" asc
+''').fetchall()
+            local_jobs = self.get_local_jobs(conn, rows)
+            jobs = [*own_backend_jobs, *local_jobs]
             rows = conn.execute('''\
 select "queue", "value"
 from "limits"
 order by "queue" asc
 ''').fetchall()
             pending_jobs = collections.defaultdict(list)
-            for job in self.backend.get_own_pending_jobs():
-                pending_jobs[job.queue].append(job)
+            for job in jobs:
+                if job.state != 'r':
+                    pending_jobs[job.queue].append(job)
             queues = []
             for queue, limit in rows:
                 queue_jobs = self.merge_pending_and_running_jobs(
@@ -262,14 +268,6 @@ order by "id" asc
         local_jobs = self.get_local_jobs(conn, rows)
         return [*backend_jobs, *local_jobs]
 
-    def get_own_jobs(self, conn):
-        backend_jobs = self.backend.get_own_jobs()
-        rows = conn.execute('''\
-select "id", "name" from "jobs" order by "id" asc
-''').fetchall()
-        local_jobs = self.get_local_jobs(conn, rows)
-        return [*backend_jobs, *local_jobs]
-
 class Backend:
 
     def get_cwd(self):
@@ -288,20 +286,20 @@ class Backend:
         """Submit a command to the backend."""
         raise NotImplementedError
 
+    def get_own_jobs(self):
+        """Return a list of pending and running jobs for the current user."""
+        raise NotImplementedError
+
     def get_own_pending_jobs(self):
         """Return a list of all pending jobs for the current user."""
         raise NotImplementedError
 
-    def get_own_running_jobs_in_queue(self):
+    def get_own_running_jobs_in_queue(self, queue):
         """Return a list of running jobs in a queue for the current user."""
         raise NotImplementedError
 
-    def get_running_jobs_in_queue(self):
+    def get_running_jobs_in_queue(self, queue):
         """Return a list of running jobs in a queue for all users."""
-        raise NotImplementedError
-
-    def get_own_jobs(self):
-        """Return a list of pending and running jobs for the current user."""
         raise NotImplementedError
 
 @dataclasses.dataclass
