@@ -96,10 +96,11 @@ order by "queue" asc
                 pending_jobs[job.queue].append(job)
             queues = []
             for queue, limit in rows:
-                taken = sum(
-                    job.slots
-                    for job in self.add_running_backend_jobs_in_queue(pending_jobs[queue], queue)
+                queue_jobs = self.merge_pending_and_running_jobs(
+                    pending_jobs[queue],
+                    self.backend.get_own_running_jobs_in_queue(queue)
                 )
+                taken = sum(job.slots for job in queue_jobs)
                 queues.append((queue, Capacity(taken, limit)))
         return ListOwnInfo(jobs, queues)
 
@@ -208,14 +209,18 @@ delete from "jobs" where "id" = ?
             for job in self.backend.get_own_pending_jobs()
             if job.queue == queue
         )
-        return self.add_running_backend_jobs_in_queue(pending_jobs, queue)
-
-    def add_running_backend_jobs_in_queue(self, pending_jobs, queue):
         running_jobs = self.backend.get_own_running_jobs_in_queue(queue)
-        return collections.OrderedDict(
-            (job.id, job)
-            for job in itertools.chain(pending_jobs, running_jobs)
-        ).values()
+        return self.merge_pending_and_running_jobs(pending_jobs, running_jobs)
+
+    def merge_pending_and_running_jobs(self, pending_jobs, running_jobs):
+        # Pending jobs should be queried before the running jobs to avoid
+        # a race condition where a pending job becomes a running job in
+        # between queries.
+        pending_jobs_by_id = collections.OrderedDict((job.id, job) for job in pending_jobs)
+        running_jobs = list(running_jobs)
+        for job in running_jobs:
+            pending_jobs_by_id.pop(job.id, None)
+        return [*running_jobs, *pending_jobs_by_id.values()]
 
     def get_local_jobs(self, conn, rows):
         # We could fetch all the queues for each job in one query using
@@ -239,7 +244,13 @@ where "job_id" = ?
             )
 
     def get_queue_jobs(self, conn, queue):
-        backend_jobs = self.backend.get_queue_jobs(queue)
+        own_pending_jobs = (
+            job
+            for job in self.backend.get_own_pending_jobs()
+            if job.queue == queue
+        )
+        running_jobs = self.backend.get_running_jobs_in_queue(queue)
+        backend_jobs = self.merge_pending_and_running_jobs(own_pending_jobs, running_jobs)
         rows = conn.execute('''\
 select "id", "name"
 from "jobs"
@@ -262,27 +273,35 @@ select "id", "name" from "jobs" order by "id" asc
 class Backend:
 
     def get_cwd(self):
+        """Get the current directory."""
         raise NotImplementedError
 
     def get_own_user(self):
+        """Get the current user."""
         raise NotImplementedError
 
     def connect_to_db(self):
+        """Open a connection to the SQLite database."""
         raise NotImplementedError
 
     def submit_job(self, queue, name, args, cwd):
+        """Submit a command to the backend."""
         raise NotImplementedError
 
     def get_own_pending_jobs(self):
+        """Return a list of all pending jobs for the current user."""
         raise NotImplementedError
 
     def get_own_running_jobs_in_queue(self):
+        """Return a list of running jobs in a queue for the current user."""
         raise NotImplementedError
 
-    def get_queue_jobs(self):
+    def get_running_jobs_in_queue(self):
+        """Return a list of running jobs in a queue for all users."""
         raise NotImplementedError
 
     def get_own_jobs(self):
+        """Return a list of pending and running jobs for the current user."""
         raise NotImplementedError
 
 @dataclasses.dataclass

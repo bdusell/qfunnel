@@ -143,3 +143,27 @@ def test_list_queue():
             assert job.queue == 'gpu@@a gpu@@b'
         assert info.capacity.taken == 3
         assert info.capacity.limit == 3
+
+def test_list_queue_pending():
+    with get_mock_backend() as backend:
+        backend.set_capacity('gpu@@a', 3)
+        program = Program(backend)
+        program.set_limit('gpu@@a', 5)
+        for i in range(10):
+            program.submit(['gpu@@a'], f'job-{i}', ['script.bash'])
+        info = program.list_queue_jobs('gpu@@a')
+        jobs = info.jobs
+        from pprint import pprint
+        pprint(jobs)
+        assert len(jobs) == 10
+        for job in jobs[:3]:
+            assert job.state == 'r'
+            assert job.queue == 'gpu@@a'
+        for job in jobs[3:5]:
+            assert job.state == 'qw'
+            assert job.queue == 'gpu@@a'
+        for job in jobs[5:]:
+            assert job.state == '-'
+            assert job.queue == 'gpu@@a'
+        assert info.capacity.taken == 5
+        assert info.capacity.limit == 5
