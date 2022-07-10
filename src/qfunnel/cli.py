@@ -21,8 +21,11 @@ def print_job_table(jobs, show_user):
         print(line)
 
 def describe_capacity(capacity):
-    available = max(0, capacity.limit - capacity.taken)
-    return f'{capacity.taken}/{capacity.limit} ({available} available)'
+    if capacity.limit is not None:
+        available = max(0, capacity.limit - capacity.taken)
+        return f'{capacity.taken}/{capacity.limit} ({available} available)'
+    else:
+        return f'{capacity.taken}/unlimited'
 
 def main():
 
