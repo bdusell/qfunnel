@@ -202,7 +202,7 @@ delete from "jobs" where "id" = ?
             for job in self.backend.get_own_pending_jobs()
             if job.queue == queue
         )
-        running_jobs = self.backend.get_running_jobs_in_queue(queue)
+        running_jobs = self.backend.get_own_running_jobs_in_queue(queue)
         return collections.OrderedDict(
             (job.id, job)
             for job in itertools.chain(pending_jobs, running_jobs)
