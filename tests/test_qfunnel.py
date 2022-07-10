@@ -96,6 +96,14 @@ def test_list():
         for job in jobs[6:]:
             assert job.state == '-'
             assert job.queue == 'gpu@@a gpu@@b'
+        assert len(info.queues) == 2
+        (name_a, info_a), (name_b, info_b) = info.queues
+        assert name_a == 'gpu@@a'
+        assert name_b == 'gpu@@b'
+        assert info_a.taken == 6
+        assert info_a.limit == 6
+        assert info_b.taken == 0
+        assert info_b.limit == 0
 
 def test_list_queue():
     with get_mock_backend() as backend:
@@ -114,9 +122,11 @@ def test_list_queue():
             assert job.state == 'r'
             assert job.queue == 'gpu@@a'
         for job in jobs[5:8]:
-            assert job.user == 'myuser'
+            assert job.user == backend.get_own_user()
             assert job.state == 'r'
             assert job.queue == 'gpu@@a'
         for job in jobs[8:]:
             assert job.state == '-'
             assert job.queue == 'gpu@@a gpu@@b'
+        assert info.capacity.taken == 3
+        assert info.capacity.limit == 3

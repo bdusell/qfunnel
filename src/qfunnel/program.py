@@ -70,35 +70,32 @@ values (?, ?)
             self.check_impl(conn)
 
     def list_queue_jobs(self, queue):
-        # TODO capacity
-        return ListQueueInfo(self.list_queue_jobs_jobs(queue), None)
-
-    def list_queue_jobs_jobs(self, queue):
-        backend_jobs = self.backend.get_queue_jobs(queue)
         with self.get_db_connection() as conn:
-            rows = conn.execute('''\
-select "id", "name"
-from "jobs"
-where exists (
-  select 1 from "job_queues" where "job_id" = "jobs"."id" and "queue" = ?
-)
-order by "id" asc
-''', (queue,)).fetchall()
-            local_jobs = list(self.get_local_jobs(conn, rows))
-        return [*backend_jobs, *local_jobs]
+            jobs = self.get_queue_jobs(conn, queue)
+            own_user = self.backend.get_own_user()
+            taken = sum(job.slots for job in jobs if job.user == own_user and job.state != '-')
+            row = conn.execute('''\
+select "value" from "limits" where "queue" = ?
+''', (queue,)).fetchone()
+            if row is not None:
+                limit, = row
+            else:
+                limit = None
+        return ListQueueInfo(jobs, Capacity(taken, limit))
 
     def list_own_jobs(self):
-        # TODO capacity
-        return ListOwnInfo(self.list_own_jobs_jobs(), None)
-
-    def list_own_jobs_jobs(self):
-        backend_jobs = self.backend.get_own_jobs()
         with self.get_db_connection() as conn:
+            jobs = self.get_own_jobs(conn)
             rows = conn.execute('''\
-select "id", "name" from "jobs" order by "id" asc
+select "queue", "value"
+from "limits"
+order by "queue" asc
 ''').fetchall()
-            local_jobs = list(self.get_local_jobs(conn, rows))
-        return [*backend_jobs, *local_jobs]
+            queues = []
+            for queue, limit in rows:
+                taken = sum(job.slots for job in self.backend.get_own_queue_jobs(queue))
+                queues.append((queue, Capacity(taken, limit)))
+        return ListOwnInfo(jobs, queues)
 
     def check(self):
         with self.get_db_connection() as conn:
@@ -231,6 +228,27 @@ where "job_id" = ?
                 # TODO Add timestamp to database?
                 since=None
             )
+
+    def get_queue_jobs(self, conn, queue):
+        backend_jobs = self.backend.get_queue_jobs(queue)
+        rows = conn.execute('''\
+select "id", "name"
+from "jobs"
+where exists (
+  select 1 from "job_queues" where "job_id" = "jobs"."id" and "queue" = ?
+)
+order by "id" asc
+''', (queue,)).fetchall()
+        local_jobs = self.get_local_jobs(conn, rows)
+        return [*backend_jobs, *local_jobs]
+
+    def get_own_jobs(self, conn):
+        backend_jobs = self.backend.get_own_jobs()
+        rows = conn.execute('''\
+select "id", "name" from "jobs" order by "id" asc
+''').fetchall()
+        local_jobs = self.get_local_jobs(conn, rows)
+        return [*backend_jobs, *local_jobs]
 
 class Backend:
     pass
