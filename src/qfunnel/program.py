@@ -187,13 +187,13 @@ order by "queue_rowid" asc
             for queue, limit, job_id, name, command_json, cwd in rows:
                 if limit is None or self.queue_has_open_slots(queue, limit):
                     args = json.loads(command_json)
-                    self.backend.submit_job(queue, name, args, cwd)
                     conn.execute('''\
 delete from "job_queues" where "job_id" = ?
 ''', (job_id,))
                     conn.execute('''\
 delete from "jobs" where "id" = ?
 ''', (job_id,))
+                    self.backend.submit_job(queue, name, args, cwd)
                     return True
         return False
 
