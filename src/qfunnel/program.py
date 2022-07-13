@@ -5,6 +5,7 @@ import datetime
 import itertools
 import json
 import pathlib
+import re
 import sqlite3
 import time
 
@@ -52,7 +53,7 @@ delete from "limits"
 where "queue" = ?
 ''', (queue,))
 
-    def submit(self, queues, name, args):
+    def submit(self, queues, name, args, deferred=False):
         command_json = json.dumps(args, separators=(',', ':'))
         cwd = self.backend.get_cwd()
         with self.get_db_connection() as conn:
@@ -67,7 +68,8 @@ values (?, ?, ?)
 insert into "job_queues"("job_id", "queue")
 values (?, ?)
 ''', (job_id, queue))
-            self.check_impl(conn)
+            if not deferred:
+                self.check_impl(conn)
 
     def list_queue_jobs(self, queue):
         with self.get_db_connection() as conn:
@@ -118,6 +120,16 @@ order by "queue" asc
         while True:
             self.check()
             time.sleep(seconds)
+
+    def delete(self, job_ids):
+        backend_jobs, local_jobs = self.parse_job_ids(job_ids)
+        if local_jobs:
+            with self.get_db_connection() as conn:
+                with self.lock_db(conn):
+                    for job_id in local_jobs:
+                        self.delete_local_job(conn, job_id)
+        if backend_jobs:
+            raise NotImplementedError
 
     @contextlib.contextmanager
     def get_db_connection(self):
@@ -187,12 +199,7 @@ order by "queue_rowid" asc
             for queue, limit, job_id, name, command_json, cwd in rows:
                 if limit is None or self.queue_has_open_slots(queue, limit):
                     args = json.loads(command_json)
-                    conn.execute('''\
-delete from "job_queues" where "job_id" = ?
-''', (job_id,))
-                    conn.execute('''\
-delete from "jobs" where "id" = ?
-''', (job_id,))
+                    self.delete_local_job(conn, job_id)
                     self.backend.submit_job(queue, name, args, cwd)
                     return True
         return False
@@ -270,6 +277,26 @@ order by "id" asc
 ''', (queue,)).fetchall()
         local_jobs = self.get_local_jobs(conn, rows)
         return [*backend_jobs, *local_jobs]
+
+    def parse_job_ids(self, job_ids):
+        local_job_id_re = re.compile(r'^x([0-9]+)$')
+        backend_jobs = []
+        local_jobs = []
+        for job_id in job_ids:
+            m = local_job_id_re.match(job_id)
+            if m is not None:
+                local_jobs.append(int(m.group(1)))
+            else:
+                backend_jobs.append(job_id)
+        return backend_jobs, local_jobs
+
+    def delete_local_job(self, conn, job_id):
+        conn.execute('''\
+delete from "job_queues" where "job_id" = ?
+''', (job_id,))
+        conn.execute('''\
+delete from "jobs" where "id" = ?
+''', (job_id,))
 
 class Backend:
 

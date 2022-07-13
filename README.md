@@ -58,10 +58,10 @@ qf limit
 
 ### Submit/enqueue jobs
 
-You should switch to submitting jobs using `qf submit` instead of `qsub`. When
-you submit jobs through QFunnel, it respects the queue limits you set and will
-buffer jobs locally if the limit for its queue has been reached. It can submit
-them later when space becomes available.
+To submit jobs, use the command `qf submit` instead of `qsub`. When you submit
+jobs through QFunnel, it respects the queue limits you set and will buffer jobs
+locally if the limit for its queue has been reached. It can submit them later
+when space becomes available.
 
 You can submit new jobs using:
 
@@ -81,6 +81,15 @@ locally.
 
 ```sh
 qf submit --queue 'gpu@@nlp-gpu' --queue 'gpu@@csecri' --name example-job -- -l gpu_card=1 example_job.bash
+```
+
+There is also a a `--deferred` option that enqueues the job locally but does
+not immediately attempt to submit it with `qsub`. This is convenient when
+submitting a large number of jobs in a loop, as querying `qstat` and running
+`qsub` repeatedly can be quite slow.
+
+```sh
+qf submit --queue 'gpu@@nlp-gpu' --name example-job --deferred -- -l gpu_card=1 example_job.bash
 ```
 
 ### List jobs
@@ -132,3 +141,26 @@ qf watch --seconds 30
 To leave it running in the background, you can open a `screen` session on your
 workstation, ssh into a CRC frontend, run `qf watch`, and detach from the
 screen session by pressing "Ctrl+a" and then "d".
+
+### Cancel jobs
+
+You can cancel one or more jobs at once using:
+
+```sh
+qf delete 123 124 125 x12 x13
+```
+
+The arguments are IDs for jobs as shown by `qf list`. Note that locally
+buffered jobs always have IDs that start with "x".
+
+### Race conditions
+
+QFunnel is designed so that it is safe to run `qf submit` while running `qf
+watch` or `qf check` in the background, so you should not need to worry about
+race conditions that cause, for example, the same job to be submitted more than
+once. If you do notice a race condition, please file a bug report.
+
+### Files
+
+QFunnel stores queue limits and locally buffered jobs in the file
+`~/.local/share/qfunnel.db`.

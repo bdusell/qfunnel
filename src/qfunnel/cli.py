@@ -56,6 +56,7 @@ def main():
     submit_parser = subparsers.add_parser('submit')
     submit_parser.add_argument('--queue', required=True, action='append')
     submit_parser.add_argument('--name', required=True)
+    submit_parser.add_argument('--deferred', action='store_true', default=False)
     submit_parser.add_argument('args', nargs=argparse.REMAINDER)
 
     list_parser = subparsers.add_parser('list')
@@ -65,6 +66,9 @@ def main():
 
     watch_parser = subparsers.add_parser('watch')
     watch_parser.add_argument('--seconds', type=float, default=float(60 * 5))
+
+    delete_parser = subparsers.add_parser('delete')
+    delete_parser.add_argument('id', nargs='*')
 
     args = parser.parse_args()
 
@@ -93,7 +97,7 @@ def main():
         command_args = args.args
         if command_args and command_args[0] == '--':
             command_args = command_args[1:]
-        program.submit(args.queue, args.name, command_args)
+        program.submit(args.queue, args.name, command_args, args.deferred)
     elif args.command == 'list':
         if args.queue is not None:
             info = program.list_queue_jobs(args.queue)
@@ -112,6 +116,8 @@ def main():
             program.watch(args.seconds)
         except KeyboardInterrupt:
             print()
+    elif args.command == 'delete':
+        program.delete(args.id)
     else:
         raise ValueError
 
