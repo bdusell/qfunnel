@@ -167,3 +167,31 @@ def test_list_queue_pending():
             assert job.queue == 'gpu@@a'
         assert info.capacity.taken == 5
         assert info.capacity.limit == 5
+
+def test_delete():
+    with get_mock_backend() as backend:
+        program = Program(backend)
+        program.set_limit('gpu@@a', 5)
+        for i in range(10):
+            program.submit(['gpu@@a'], f'job-{i}', ['script.bash'])
+        jobs = program.list_own_jobs().jobs
+        assert len(jobs) == 10
+        for job in jobs[:5]:
+            assert job.state == 'r'
+            assert isinstance(job.id, str)
+        for job in jobs[5:]:
+            assert job.state == '-'
+            assert isinstance(job.id, str)
+        assert backend.running_jobs() == { 'gpu@@a' : {f'job-{i}' for i in range(5)} }
+        program.delete([jobs[1].id, jobs[4].id, jobs[7].id, jobs[8].id])
+        assert backend.running_jobs() == { 'gpu@@a' : {'job-0', 'job-2', 'job-3'} }
+        jobs = program.list_own_jobs().jobs
+        assert len(jobs) == 6
+        for i, job_no in enumerate((0, 2, 3)):
+            job = jobs[i]
+            assert job.state == 'r'
+            assert job.name == f'job-{job_no}'
+        for i, job_no in enumerate((5, 6, 9)):
+            job = jobs[3 + i]
+            assert job.state == '-'
+            assert job.name == f'job-{job_no}'

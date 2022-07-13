@@ -129,7 +129,7 @@ order by "queue" asc
                     for job_id in local_jobs:
                         self.delete_local_job(conn, job_id)
         if backend_jobs:
-            raise NotImplementedError
+            self.backend.delete_jobs(backend_jobs)
 
     @contextlib.contextmanager
     def get_db_connection(self):
@@ -314,6 +314,10 @@ class Backend:
 
     def submit_job(self, queue, name, args, cwd):
         """Submit a command to the backend."""
+        raise NotImplementedError
+
+    def delete_jobs(self, job_ids):
+        """Cancel one or more running or pending jobs."""
         raise NotImplementedError
 
     def get_own_jobs(self):

@@ -34,6 +34,9 @@ class RealBackend(Backend):
             *args
         ], cwd=cwd)
 
+    def delete_jobs(self, job_ids):
+        run_sge_command(['qdel', *job_ids])
+
     def get_own_jobs(self):
         output = capture_sge_command_output([
             'qstat',

@@ -27,6 +27,10 @@ class MockBackend(Backend):
     def submit_job(self, queue, name, args, cwd):
         self.add_job(queue, name)
 
+    def delete_jobs(self, job_ids):
+        for job_id in job_ids:
+            self.finish_job(self.job_id_to_name(job_id))
+
     def get_own_jobs(self):
         own_user = self.get_own_user()
         return [job for job in self.get_all_jobs() if job.user == own_user]
@@ -57,7 +61,7 @@ class MockBackend(Backend):
         else:
             state = 'r'
         self.running_jobs_by_name[name] = Job(
-            id=self.job_id_counter,
+            id=str(self.job_id_counter),
             user=user,
             name=name,
             slots=1,
@@ -82,6 +86,11 @@ class MockBackend(Backend):
 
     def get_all_jobs(self):
         return sorted(self.running_jobs_by_name.values(), key=lambda job: job.id)
+
+    def job_id_to_name(self, job_id):
+        for job in self.get_all_jobs():
+            if job.id == job_id:
+                return job.name
 
     def finish_job(self, name):
         old_job = self.running_jobs_by_name.pop(name)
