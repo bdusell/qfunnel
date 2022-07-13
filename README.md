@@ -59,9 +59,9 @@ qf limit
 ### Submit/enqueue jobs
 
 To submit jobs, use the command `qf submit` instead of `qsub`. When you submit
-jobs through QFunnel, it respects the queue limits you set and will buffer jobs
-locally if the limit for its queue has been reached. It can submit them later
-when space becomes available.
+a job through QFunnel, QFunnel respects the queue limits you set and will
+buffer a job locally if the limit for its queue has been reached. It can submit
+it later when space becomes available.
 
 You can submit new jobs using:
 
