@@ -153,8 +153,6 @@ def test_list_queue_pending():
             program.submit(['gpu@@a'], f'job-{i}', ['script.bash'])
         info = program.list_queue_jobs('gpu@@a')
         jobs = info.jobs
-        from pprint import pprint
-        pprint(jobs)
         assert len(jobs) == 10
         for job in jobs[:3]:
             assert job.state == 'r'
