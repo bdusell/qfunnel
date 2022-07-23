@@ -45,30 +45,76 @@ def print_capacity_table(limits):
 
 def main():
 
-    parser = argparse.ArgumentParser()
-    subparsers = parser.add_subparsers(dest='command', required=True)
+    parser = argparse.ArgumentParser(
+        description=
+        'A tool for limiting the number of CRC jobs you submit to certain '
+        'queues.'
+    )
+    subparsers = parser.add_subparsers(dest='command', required=True,
+        help='The sub-command to run.')
 
-    limit_parser = subparsers.add_parser('limit')
-    limit_parser.add_argument('--delete', action='store_true', default=False)
-    limit_parser.add_argument('queue', nargs='?')
-    limit_parser.add_argument('limit', type=int, nargs='?')
+    limit_parser = subparsers.add_parser('limit',
+        help='Show, set, or delete limits on the number of jobs submitted to '
+             'each queue. Different queues can have different limits. With no '
+             'arguments, show the limits for all queues.')
+    limit_parser.add_argument('queue', nargs='?',
+        help='A queue specifier as given to `qsub -q`.')
+    limit_parser.add_argument('limit', type=int, nargs='?',
+        help='If given, set the limit for this queue to this value.')
+    limit_parser.add_argument('--delete', action='store_true', default=False,
+        help='Rather than showing or setting the limit for this queue, delete '
+             'it, making it unlimited.')
 
-    submit_parser = subparsers.add_parser('submit')
-    submit_parser.add_argument('--queue', required=True, action='append')
-    submit_parser.add_argument('--name', required=True)
-    submit_parser.add_argument('--deferred', action='store_true', default=False)
-    submit_parser.add_argument('args', nargs=argparse.REMAINDER)
+    submit_parser = subparsers.add_parser('submit',
+        help='Submit a new job to a queue or series of queues. If the number '
+             'of submitted jobs in the queue has not reached its limit, the '
+             'job will be submitted immediately with `qsub`. Otherwise, it '
+             'will be buffered locally so it can be submitted later when there '
+             'is room in the queue.')
+    submit_parser.add_argument('--queue', required=True, action='append',
+        help='The queue to which the job will be submitted. This option can '
+             'be given multiple times to specify a series of fallback queues '
+             '(order matters), in which case the job will be submitted to the '
+             'second queue if the first is full, the third if the first and '
+             'second are full, and so on. The job will be buffered locally if '
+             'all queues are full.')
+    submit_parser.add_argument('--name', required=True,
+        help='The name of the job, corresponding to the `qsub -N` option. '
+             'This will be shown by `list`.')
+    submit_parser.add_argument('--deferred', action='store_true', default=False,
+        help='Even if there is room in the queue, do not submit the job with '
+             '`qsub`; just buffer it locally. This is much faster than the '
+             'alternative, making it very convenient when submitting many '
+             'jobs in a loop.')
+    submit_parser.add_argument('args', nargs=argparse.REMAINDER,
+        help='Arguments that will be passed directly to the `qsub` command. '
+             'If you need to pass any options beginning with `-` to `qsub`, '
+             'use `--` as the first argument. Do not use the `-q` or `-N` '
+             'options.')
 
-    list_parser = subparsers.add_parser('list')
-    list_parser.add_argument('queue', nargs='?')
+    list_parser = subparsers.add_parser('list',
+        help='List the status of all of your running, pending, and locally '
+             'buffered jobs.')
+    list_parser.add_argument('queue', nargs='?',
+        help='If given, only list jobs in this queue, including other users\' '
+             'jobs.')
 
-    check_parser = subparsers.add_parser('check')
+    check_parser = subparsers.add_parser('check',
+        help='Check if there are any locally buffered jobs that can be '
+             'submitted, and if so, submit them.')
 
-    watch_parser = subparsers.add_parser('watch')
-    watch_parser.add_argument('--seconds', type=float, default=float(60 * 5))
+    watch_parser = subparsers.add_parser('watch',
+        help='Enter a loop that runs `check` at regular intervals.')
+    watch_parser.add_argument('--seconds', type=float, default=600.0,
+        help='The number of seconds to wait in between checks. The default is '
+             '10 minutes.')
 
-    delete_parser = subparsers.add_parser('delete')
-    delete_parser.add_argument('id', nargs='*')
+    delete_parser = subparsers.add_parser('delete',
+        help='Delete running, pending, or locally buffered jobs. Running and '
+             'pending jobs are canceled with `qdel`. Locally buffered jobs are '
+             'simply deleted.')
+    delete_parser.add_argument('id', nargs='*',
+        help='The IDs of the jobs to delete as shown by `list`.')
 
     args = parser.parse_args()
 
