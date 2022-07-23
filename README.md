@@ -15,12 +15,45 @@ pip3 install --user git+https://github.com/bdusell/qfunnel
 The `qfunnel` package provides the `qf` executable under `~/.local/bin`. Make
 sure to add `~/.local/bin` to your `PATH`.
 
-## Upgrading
+## Setting up the daemon
+
+QFunnel needs to have a process running in the background that periodically
+checks the number of jobs submitted to the queues and submits locally buffered
+jobs when space is available. To do this, log in to a CRC frontend machine and
+open a new tmux window.
 
 ```sh
-pip3 uninstall qfunnel
-pip3 install --user git+https://github.com/bdusell/qfunnel
+tmux
 ```
+
+In the tmux window, start the daemon by running
+```sh
+qf watch
+```
+
+You must follow the following steps in order to prevent QFunnel from losing
+permission to access the AFS file system after you log out of your ssh session,
+as described in
+[this post](https://unix.stackexchange.com/questions/301530/why-do-i-get-permission-denied-error-when-i-log-out-of-the-ssh-session).
+First, create a new window in the same tmux session by pressing Ctrl+b then c.
+Then, in that new window, run
+```sh
+kinit && aklog
+```
+Enter your password when prompted. Finally, detach from the tmux session by
+pressing Ctrl+b then d. QFunnel will now continue to run in the background,
+even after you log out of your ssh session.
+
+## Upgrading
+
+* Reattach to the tmux window with `tmux attach` and stop the `qf watch`
+  daemon with Ctrl+c.
+* Run
+  ```sh
+  pip3 uninstall qfunnel
+  pip3 install --user git+https://github.com/bdusell/qfunnel
+  ```
+* Restart the daemon.
 
 ## Usage
 
