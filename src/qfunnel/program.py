@@ -9,6 +9,7 @@ import re
 import sqlite3
 import sys
 import time
+import traceback
 
 class Program:
 
@@ -123,7 +124,7 @@ order by "queue" asc
             try:
                 self.check()
             except Exception as e:
-                print(e, file=stderr)
+                print(traceback.format_exc(), end='', file=stderr)
             self.log_message('...done', stdout)
             time.sleep(seconds)
 
