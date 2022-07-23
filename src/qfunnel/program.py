@@ -7,6 +7,7 @@ import json
 import pathlib
 import re
 import sqlite3
+import sys
 import time
 
 class Program:
@@ -116,9 +117,14 @@ order by "queue" asc
         with self.get_db_connection() as conn:
             self.check_impl(conn)
 
-    def watch(self, seconds):
+    def watch(self, seconds, stdout=sys.stdout, stderr=sys.stderr):
         while True:
-            self.check()
+            self.log_message('checking...', stdout)
+            try:
+                self.check()
+            except Exception as e:
+                print(e, file=stderr)
+            self.log_message('...done', stdout)
             time.sleep(seconds)
 
     def delete(self, job_ids):
@@ -297,6 +303,10 @@ delete from "job_queues" where "job_id" = ?
         conn.execute('''\
 delete from "jobs" where "id" = ?
 ''', (job_id,))
+
+    def log_message(self, message, file):
+        time_str = datetime.datetime.now().strftime('%a %b %d %Y @ %I:%M:%S %p')
+        print(f'[{time_str}] {message}', file=file)
 
 class Backend:
 
