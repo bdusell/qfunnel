@@ -101,8 +101,8 @@ from "limits"
 order by "queue" asc
 ''').fetchall()
             pending_jobs = collections.defaultdict(list)
-            for job in jobs:
-                if job.state != 'r':
+            for job in own_backend_jobs:
+                if job.state == 'qw':
                     pending_jobs[job.queue].append(job)
             queues = []
             for queue, limit in rows:
