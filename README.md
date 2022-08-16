@@ -164,7 +164,7 @@ qf watch
 ```
 
 This simply runs `qf check` at regular intervals. The default is to run it
-every 5 minutes. You can also set the number of seconds in between checks to
+every 10 minutes. You can also set the number of seconds in between checks to
 something else, e.g. 30 seconds:
 
 ```sh
