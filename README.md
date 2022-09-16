@@ -143,6 +143,9 @@ To show all jobs in a queue, including those of other users, you can run:
 qf list 'gpu@@nlp-gpu'
 ```
 
+In both cases, you can filter jobs by name with a regular expression using
+`--name`.
+
 ### Submit locally buffered jobs
 
 QFunnel needs to periodically poll `qstat` to figure out if there are open
@@ -183,6 +186,17 @@ qf delete 123 124 125 x12 x13
 
 The arguments are IDs for jobs as shown by `qf list`. Note that locally
 buffered jobs always have IDs that start with "x".
+
+### Reorder locally buffered jobs
+
+You can change the order of locally buffered jobs, before they are submitted,
+using `qf bump`, which moves selected jobs to the front of the queue of locally
+buffered jobs. You can select jobs by name with a regular expression. The
+regular expression matches anyhwere in the string.
+
+```sh
+qf bump --name 'foobar-\d+'
+```
 
 ### Race conditions
 
