@@ -1,4 +1,5 @@
 from qfunnel.cli import Program
+from qfunnel.program import JobFilter
 
 from mock_backend import get_mock_backend
 
@@ -193,3 +194,40 @@ def test_delete():
             job = jobs[3 + i]
             assert job.state == '-'
             assert job.name == f'job-{job_no}'
+
+def test_bump():
+    with get_mock_backend() as backend:
+        program = Program(backend)
+        program.set_limit('gpu@@a', 5)
+        for i in range(10):
+            program.submit(['gpu@@a'], f'job-{i}', ['script.bash'])
+        for i in range(5):
+            program.submit(['gpu@@a'], f'bumpme-{i}', ['script.bash'])
+        for i in range(5):
+            program.submit(['gpu@@a'], f'anotherjob-{i}', ['script.bash'])
+        for i in range(5, 10):
+            program.submit(['gpu@@a'], f'bumpme-{i}', ['script.bash'])
+        for i in range(5, 10):
+            program.submit(['gpu@@a'], f'anotherjob-{i}', ['script.bash'])
+        jobs = program.list_own_jobs().jobs
+        assert len(jobs) == 30
+        for job in jobs[:5]:
+            assert job.state == 'r'
+        for job in jobs[5:]:
+            assert job.state == '-'
+        for i in range(5):
+            assert jobs[10+i].name == f'bumpme-{i}'
+        for i in range(5):
+            assert jobs[20+i].name == f'bumpme-{5+i}'
+        program.bump(JobFilter(name='bumpme-'))
+        jobs = program.list_own_jobs().jobs
+        for job in jobs[:5]:
+            assert job.state == 'r'
+        for job in jobs[5:]:
+            assert job.state == '-'
+        for i in range(10):
+            assert jobs[5+i].name == f'bumpme-{i}'
+        for i in range(5):
+            assert jobs[15+i].name == f'job-{i+5}'
+        for i in range(10):
+            assert jobs[20+i].name == f'anotherjob-{i}'

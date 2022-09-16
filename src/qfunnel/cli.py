@@ -126,6 +126,11 @@ def main():
     delete_parser.add_argument('id', nargs='*',
         help='The IDs of the jobs to delete as shown by `list`.')
 
+    bump_parser = subparsers.add_parser('bump',
+        help='Move a selection of locally buffered jobs to the front of the '
+             'queue of locally buffered jobs.')
+    add_job_filter_args(bump_parser)
+
     args = parser.parse_args()
 
     program = Program(RealBackend())
@@ -174,6 +179,8 @@ def main():
             print()
     elif args.command == 'delete':
         program.delete(args.id)
+    elif args.command == 'bump':
+        program.bump(get_job_filter(args))
     else:
         raise ValueError
 

@@ -4,6 +4,7 @@ import dataclasses
 import datetime
 import itertools
 import json
+import math
 import pathlib
 import re
 import sqlite3
@@ -142,6 +143,42 @@ order by "queue" asc
         if backend_jobs:
             self.backend.delete_jobs(backend_jobs)
 
+    def bump(self, job_filter):
+        with self.get_db_connection() as conn:
+            with self.lock_db(conn):
+                conn.execute('pragma defer_foreign_keys = ON')
+                rows = conn.execute('''\
+select "id", "name" from "jobs" order by "id" asc
+''').fetchall()
+                all_jobs = self.get_local_jobs(conn, rows)
+                selected_jobs = []
+                unselected_jobs = []
+                for job in all_jobs:
+                    if job_filter.matches_job(job):
+                        selected_jobs.append(job)
+                    else:
+                        unselected_jobs.append(job)
+                max_selected_id = max(job.local_id for job in selected_jobs) if selected_jobs else -math.inf
+                min_unselected_id = min(job.local_id for job in unselected_jobs) if unselected_jobs else math.inf
+                if max_selected_id < min_unselected_id:
+                    # Do nothing; the jobs are already in the correct order.
+                    pass
+                else:
+                    offset = max_selected_id + 1 - min_unselected_id
+                    for job in reversed(unselected_jobs):
+                        new_id = job.local_id + offset
+                        conn.execute('''\
+update "jobs"
+set "id" = ?
+where "id" = ?
+''', (new_id, job.local_id))
+                        # TODO It might be better to use ON UPDATE CASCADE.
+                        conn.execute('''\
+update "job_queues"
+set "job_id" = ?
+where "job_id" = ?
+''', (new_id, job.local_id))
+
     @contextlib.contextmanager
     def get_db_connection(self):
         conn = self.backend.connect_to_db()
@@ -182,30 +219,28 @@ order by "queue" asc
 
     def try_dequeue_one(self, conn):
         with self.lock_db(conn):
-            # The rowid of the "job_queues" table determines the priority of
-            # each locally buffered job. Using min() on rowid ensures that all
-            # the other columns are for the highest-priority job for each
-            # queue. (This is a special case in SQLite.)
+            # The "id" of the "job" table determines the priority of each
+            # locally buffered job. Using min() on "id" ensures that all the
+            # other columns are for the highest-priority job for each queue.
+            # (This is a special case in SQLite.)
+            # The rowid of "job_queues" determines the order in which to test
+            # queues for the same job.
             rows = conn.execute('''\
 select
-  "queue1" as "queue",
+  "job_queues"."queue" as "queue",
   (
     select "value"
     from "limits"
-    where "limits"."queue" = "queue1"
+    where "limits"."queue" = "job_queues"."queue"
   ) as "limit",
-  "job_id",
+  min("jobs"."id") as "job_id",
   "jobs"."name" as "name",
   "jobs"."command_json" as "command_json",
   "jobs"."cwd" as "cwd"
-from (
-  select min(rowid) as "queue_rowid", "job_id", "queue" as "queue1"
-  from "job_queues"
-  group by "queue"
-)
-join "jobs"
-  on "job_id" = "jobs"."id"
-order by "queue_rowid" asc
+from "job_queues"
+  join "jobs" on "job_queues"."job_id" = "jobs"."id"
+group by "job_queues"."queue"
+order by "jobs"."id", "job_queues".rowid asc
 ''').fetchall()
             for queue, limit, job_id, name, command_json, cwd in rows:
                 if limit is None or self.queue_has_open_slots(queue, limit):
@@ -247,27 +282,32 @@ order by "queue_rowid" asc
             pending_jobs_by_id.pop(job.id, None)
         return [*running_jobs, *pending_jobs_by_id.values()]
 
-    def get_local_jobs(self, conn, rows):
+    def get_local_jobs(self, conn, rows, include_queue=True):
         # We could fetch all the queues for each job in one query using
         # group_concat(), but according to the SQLite docs, the order of
         # concatenation is arbitrary.
         user = self.backend.get_own_user()
         for job_id, name in rows:
-            queue_rows = conn.execute('''\
+            if include_queue:
+                queue_rows = conn.execute('''\
 select "queue"
 from "job_queues"
 where "job_id" = ?
 order by rowid asc
 ''', (job_id,)).fetchall()
+                queue = ' '.join(queue for queue, in queue_rows)
+            else:
+                queue = None
             yield Job(
                 id=f'x{job_id}',
                 user=user,
                 name=name,
                 slots=1,
                 state='-',
-                queue=' '.join(queue for queue, in queue_rows),
+                queue=queue,
                 # TODO Add timestamp to database?
-                since=None
+                since=None,
+                local_id=job_id
             )
 
     def get_queue_jobs(self, conn, queue):
@@ -302,6 +342,7 @@ order by "id" asc
         return backend_jobs, local_jobs
 
     def delete_local_job(self, conn, job_id):
+        # TODO It might be better to use ON DELETE CASCADE.
         conn.execute('''\
 delete from "job_queues" where "job_id" = ?
 ''', (job_id,))
@@ -360,6 +401,7 @@ class Job:
     state: str
     queue: str
     since: datetime.datetime
+    local_id: int=None
 
 @dataclasses.dataclass
 class Capacity:
