@@ -1,7 +1,8 @@
 import argparse
+import re
 
 from qfunnel.format import format_box_table, format_date
-from qfunnel.program import Program
+from qfunnel.program import Program, JobFilter
 from qfunnel.real_backend import RealBackend
 
 def print_limit_table(limits):
@@ -42,6 +43,14 @@ def print_capacity_table(limits):
         ))
     for line in format_box_table(head, rows):
         print(line)
+
+def add_job_filter_args(parser):
+    parser.add_argument('--name',
+        help='Only select jobs whose names match the given regular '
+             'expression.')
+
+def get_job_filter(args):
+    return JobFilter(name=args.name)
 
 def main():
 
@@ -98,6 +107,7 @@ def main():
     list_parser.add_argument('queue', nargs='?',
         help='If given, only list jobs in this queue, including other users\' '
              'jobs.')
+    add_job_filter_args(list_parser)
 
     check_parser = subparsers.add_parser('check',
         help='Check if there are any locally buffered jobs that can be '
@@ -146,12 +156,12 @@ def main():
         program.submit(args.queue, args.name, command_args, args.deferred)
     elif args.command == 'list':
         if args.queue is not None:
-            info = program.list_queue_jobs(args.queue)
+            info = program.list_queue_jobs(args.queue, get_job_filter(args))
             print_job_table(info.jobs, show_user=True)
             print()
             print_capacity_table([(args.queue, info.capacity)])
         else:
-            info = program.list_own_jobs()
+            info = program.list_own_jobs(get_job_filter(args))
             print_job_table(info.jobs, show_user=False)
             print()
             print_capacity_table(info.queues)

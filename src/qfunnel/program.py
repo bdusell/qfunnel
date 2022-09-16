@@ -73,7 +73,7 @@ values (?, ?)
             if not deferred:
                 self.check_impl(conn)
 
-    def list_queue_jobs(self, queue):
+    def list_queue_jobs(self, queue, job_filter=None):
         with self.get_db_connection() as conn:
             jobs = self.get_queue_jobs(conn, queue)
             own_user = self.backend.get_own_user()
@@ -85,9 +85,11 @@ select "value" from "limits" where "queue" = ?
                 limit, = row
             else:
                 limit = None
+        if job_filter is not None:
+            jobs = list(job_filter.filter_jobs(jobs))
         return ListQueueInfo(jobs, Capacity(taken, limit))
 
-    def list_own_jobs(self):
+    def list_own_jobs(self, job_filter=None):
         with self.get_db_connection() as conn:
             own_backend_jobs = self.backend.get_own_jobs()
             rows = conn.execute('''\
@@ -112,6 +114,8 @@ order by "queue" asc
                 )
                 taken = sum(job.slots for job in queue_jobs)
                 queues.append((queue, Capacity(taken, limit)))
+        if job_filter is not None:
+            jobs = list(job_filter.filter_jobs(jobs))
         return ListOwnInfo(jobs, queues)
 
     def check(self):
@@ -373,3 +377,22 @@ class ListOwnInfo:
     queues: list
 
 TABLES_FILE = pathlib.Path(__file__).parent / 'tables.sqlite'
+
+@dataclasses.dataclass
+class JobFilter:
+    name: str
+
+    def __post_init__(self):
+        self._name_re = None
+
+    def filter_jobs(self, jobs):
+        return filter(self.matches_job, jobs)
+
+    def matches_job(self, job):
+        return (self.name is None or self.name_re.search(job.name) is not None)
+
+    @property
+    def name_re(self):
+        if self._name_re is None:
+            self._name_re = re.compile(self.name)
+        return self._name_re
