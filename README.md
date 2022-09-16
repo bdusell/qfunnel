@@ -192,7 +192,7 @@ buffered jobs always have IDs that start with "x".
 You can change the order of locally buffered jobs, before they are submitted,
 using `qf bump`, which moves selected jobs to the front of the queue of locally
 buffered jobs. You can select jobs by name with a regular expression. The
-regular expression matches anyhwere in the string.
+regular expression matches anywhere in the string.
 
 ```sh
 qf bump --name 'foobar-\d+'
