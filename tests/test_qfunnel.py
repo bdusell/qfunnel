@@ -231,3 +231,34 @@ def test_bump():
             assert jobs[15+i].name == f'job-{i+5}'
         for i in range(10):
             assert jobs[20+i].name == f'anotherjob-{i}'
+
+def test_bump_nothing_and_everything_selected():
+    with get_mock_backend() as backend:
+        program = Program(backend)
+        program.set_limit('gpu@@a', 5)
+        for i in range(10):
+            program.submit(['gpu@@a'], f'job-{i}', ['script.bash'])
+        jobs = program.list_own_jobs().jobs
+        assert len(jobs) == 10
+        for i in range(5):
+            assert jobs[i].state == 'r'
+            assert jobs[i].name == f'job-{i}'
+        for i in range(5, 10):
+            assert jobs[i].state == '-'
+            assert jobs[i].name == f'job-{i}'
+        program.bump(JobFilter(name='bumpme-'))
+        jobs = program.list_own_jobs().jobs
+        for i in range(5):
+            assert jobs[i].state == 'r'
+            assert jobs[i].name == f'job-{i}'
+        for i in range(5, 10):
+            assert jobs[i].state == '-'
+            assert jobs[i].name == f'job-{i}'
+        program.bump(JobFilter(name='job-'))
+        jobs = program.list_own_jobs().jobs
+        for i in range(5):
+            assert jobs[i].state == 'r'
+            assert jobs[i].name == f'job-{i}'
+        for i in range(5, 10):
+            assert jobs[i].state == '-'
+            assert jobs[i].name == f'job-{i}'
