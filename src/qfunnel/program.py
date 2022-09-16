@@ -438,3 +438,6 @@ class JobFilter:
         if self._name_re is None:
             self._name_re = re.compile(self.name)
         return self._name_re
+
+    def is_empty(self):
+        return self.name is None

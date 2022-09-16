@@ -180,7 +180,11 @@ def main():
     elif args.command == 'delete':
         program.delete(args.id)
     elif args.command == 'bump':
-        program.bump(get_job_filter(args))
+        job_filter = get_job_filter(args)
+        if job_filter.is_empty():
+            parser.error('no jobs selected')
+        else:
+            program.bump(job_filter)
     else:
         raise ValueError
 
