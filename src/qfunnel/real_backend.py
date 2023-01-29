@@ -96,7 +96,13 @@ def parse_xml_output(s):
 
 def parse_xml_jobs(el):
     for job_list in el.findall('job_list'):
-        yield { subel.tag : subel.text for subel in job_list }
+        yield xml_node_to_dict(job_list)
+
+def xml_node_to_dict(el):
+    return {
+        child.tag : xml_node_to_dict(child) if len(child) > 0 else child.text
+        for child in el
+    }
 
 def dict_to_job(d):
     return Job(
@@ -105,7 +111,7 @@ def dict_to_job(d):
         name=d['full_job_name'],
         slots=int(d['slots']),
         state=d['state'],
-        queue=d['queue_name'] or d['hard_req_queue'],
+        queue=d['queue_name'] or d['request']['hard_req_queue'],
         since=parse_job_date(d.get('JAT_start_time') or d['JB_submission_time'])
     )
 
